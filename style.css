@@ -106,3 +106,111 @@
     opacity: 0.6;
     line-height: 1.4;
 }
+
+/* ============== 浮动窗 ============== */
+/* z-index 19000: 比 SillyTavern 普通弹窗高, 比 TTS 插件 dashboard (20001) 低,
+   不会盖住正在交互的弹窗 */
+#hr-floating-widget {
+    position: fixed;
+    top: 60px;
+    right: 16px;
+    z-index: 19000;
+    background: rgba(20, 20, 25, 0.92);
+    color: #fff;
+    border-radius: 10px;
+    padding: 6px 8px 6px 4px;
+    font-family: monospace;
+    user-select: none;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+    min-width: 110px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: opacity 0.15s, transform 0.15s;
+}
+#hr-floating-widget.dragging {
+    opacity: 0.85;
+    transition: none;
+    cursor: grabbing !important;
+}
+#hr-floating-widget .hr-float-grip {
+    cursor: grab;
+    font-size: 1.1em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    opacity: 0.85;
+    flex-shrink: 0;
+}
+#hr-floating-widget .hr-float-grip:hover {
+    opacity: 1;
+}
+#hr-floating-widget .hr-float-body {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    flex: 1;
+    min-width: 0;
+}
+#hr-floating-widget .hr-float-row {
+    display: flex;
+    align-items: baseline;
+    gap: 3px;
+    line-height: 1.05;
+}
+#hr-floating-widget .hr-float-num {
+    font-size: 1.35em;
+    font-weight: bold;
+    transition: color 0.3s;
+    min-width: 30px;
+}
+#hr-floating-widget .hr-float-unit {
+    font-size: 0.7em;
+    opacity: 0.6;
+}
+#hr-floating-widget .hr-float-detail {
+    font-size: 0.7em;
+    opacity: 0.7;
+    margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 130px;
+}
+#hr-floating-widget .hr-float-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-left: 2px;
+}
+#hr-floating-widget .hr-float-btn {
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+    line-height: 14px;
+    text-align: center;
+    font-size: 12px;
+    opacity: 0.5;
+    border-radius: 3px;
+    user-select: none;
+}
+#hr-floating-widget .hr-float-btn:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.12);
+}
+
+/* 折叠态: 只显示心率 + HRV 两行数字 */
+#hr-floating-widget[data-collapsed="true"] .hr-float-detail,
+#hr-floating-widget[data-collapsed="true"] .hr-float-actions {
+    display: none;
+}
+#hr-floating-widget[data-collapsed="true"] {
+    min-width: 70px;
+    padding: 4px 6px;
+}
+#hr-floating-widget[data-collapsed="true"] .hr-float-num {
+    font-size: 1.1em;
+}

@@ -63,6 +63,11 @@ const DEFAULTS = {
     rrWindowSeconds: 30,
     // 注入心率 + HRV (默认开)；关闭后只注入心率
     injectHRV: true,
+    // 浮动窗 (常驻角落, 不依赖 ST 顶栏)
+    floatingEnabled: true,
+    floatingX: null, // null = 使用默认位置
+    floatingY: null,
+    floatingCollapsed: false,
 };
 
 const state = {
@@ -87,6 +92,9 @@ const state = {
     rrCount: 0,
     maxDiff: null, // 窗口内相邻 RR 最大差值 (ms), 用来直观看出抖动幅度
     dupSkipped: 0, // 累计跳过的跨包重发次数 (诊断用)
+    // 测试模式: 在此时间戳之前, 真实通知到来时不写入 buffer.
+    // 用于让"测试(模拟值)"按钮能给出纯净结果, 而不会被实时数据稀释.
+    testFreezeUntil: 0,
 };
 
 function settings() {
@@ -264,6 +272,14 @@ function handleNotification(event) {
         state.deviceSendsRR = true;
     }
 
+    // 测试冻结期: 测试按钮会注入模拟数据并冻结真实 RR 写入 N 秒,
+    // 让用户能看到纯净的模拟结果而不被实时数据稀释.
+    if (now < state.testFreezeUntil) {
+        // 仍然更新 UI 上的当前 HR 显示, 但不污染 RR 缓冲区
+        updateUI();
+        return;
+    }
+
     if (rrIntervalsMs.length > 0) {
         // 去重：部分 BLE 心率设备 (例: Magene H303) 通知周期是固定的 ~500ms,
         // 当心率 < 120 bpm 时, 一个通知周期内可能不会有新的心跳, 设备会
@@ -376,6 +392,7 @@ async function disconnect() {
     state.rrCount = 0;
     state.maxDiff = null;
     state.dupSkipped = 0;
+    state.testFreezeUntil = 0;
     state.deviceSendsRR = null;
     updateUI();
     updateInjection();
@@ -391,6 +408,7 @@ function updateButtonText() {
 }
 
 function updateUI() {
+    updateFloatingUI();
     const display = $("#hr-display");
     const detail = $("#hr-detail");
     const hrvDisplay = $("#hrv-display");
@@ -512,6 +530,174 @@ function updateInjection() {
     setExtensionPrompt(PROMPT_KEY, text, POSITION_IN_CHAT, s.injectionDepth, false, s.injectionRole);
 }
 
+// =================== 浮动窗 ===================
+//
+// 在 ST 顶栏不可见的页面 (欢迎页 / 角色管理 / 系统设置) 也能看到
+// 心率 + HRV. 可拖拽、可折叠. 位置保存到 settings.
+//
+function buildFloatingWidget() {
+    const html = `
+<div id="hr-floating-widget" class="hr-float" data-collapsed="false">
+  <div class="hr-float-grip">💗</div>
+  <div class="hr-float-body">
+    <div class="hr-float-row">
+      <span class="hr-float-num" id="hr-float-hr">－－</span>
+      <span class="hr-float-unit">bpm</span>
+    </div>
+    <div class="hr-float-row">
+      <span class="hr-float-num" id="hr-float-rmssd">－－</span>
+      <span class="hr-float-unit">ms</span>
+    </div>
+    <div class="hr-float-detail" id="hr-float-detail">未连接</div>
+  </div>
+  <div class="hr-float-actions">
+    <span class="hr-float-btn" id="hr-float-collapse" title="折叠">－</span>
+    <span class="hr-float-btn" id="hr-float-hide" title="隐藏 (可在扩展设置里重新打开)">×</span>
+  </div>
+</div>
+    `;
+    return html;
+}
+
+function applyFloatingPosition() {
+    const s = settings();
+    const $w = $("#hr-floating-widget");
+    if (!$w.length) return;
+    if (s.floatingX != null && s.floatingY != null) {
+        // 边界保护, 防止保存的坐标在小屏幕上飘到屏幕外
+        const maxX = Math.max(0, window.innerWidth - 60);
+        const maxY = Math.max(0, window.innerHeight - 40);
+        const x = Math.max(0, Math.min(s.floatingX, maxX));
+        const y = Math.max(0, Math.min(s.floatingY, maxY));
+        $w.css({
+            left: x + "px",
+            top: y + "px",
+            right: "auto",
+            bottom: "auto",
+        });
+    }
+    $w.attr("data-collapsed", s.floatingCollapsed ? "true" : "false");
+    $w.toggle(!!s.floatingEnabled);
+}
+
+function bindFloatingDrag() {
+    const $w = $("#hr-floating-widget");
+    const $grip = $("#hr-floating-widget .hr-float-grip");
+    let dragging = false;
+    let dragOffsetX = 0;
+    let dragOffsetY = 0;
+
+    function startDrag(clientX, clientY) {
+        dragging = true;
+        const rect = $w[0].getBoundingClientRect();
+        dragOffsetX = clientX - rect.left;
+        dragOffsetY = clientY - rect.top;
+        $w.addClass("dragging");
+    }
+    function moveDrag(clientX, clientY) {
+        if (!dragging) return;
+        const x = Math.max(0, Math.min(clientX - dragOffsetX, window.innerWidth - $w.outerWidth()));
+        const y = Math.max(0, Math.min(clientY - dragOffsetY, window.innerHeight - $w.outerHeight()));
+        $w.css({ left: x + "px", top: y + "px", right: "auto", bottom: "auto" });
+    }
+    function endDrag() {
+        if (!dragging) return;
+        dragging = false;
+        $w.removeClass("dragging");
+        const s = settings();
+        const rect = $w[0].getBoundingClientRect();
+        s.floatingX = Math.round(rect.left);
+        s.floatingY = Math.round(rect.top);
+        saveSettingsDebounced();
+    }
+
+    $grip.on("mousedown", (e) => {
+        e.preventDefault();
+        startDrag(e.clientX, e.clientY);
+    });
+    $(document).on("mousemove.hrfloat", (e) => moveDrag(e.clientX, e.clientY));
+    $(document).on("mouseup.hrfloat", endDrag);
+
+    // Touch
+    $grip.on("touchstart", (e) => {
+        const t = e.originalEvent.touches[0];
+        startDrag(t.clientX, t.clientY);
+    });
+    $(document).on("touchmove.hrfloat", (e) => {
+        if (!dragging) return;
+        const t = e.originalEvent.touches[0];
+        moveDrag(t.clientX, t.clientY);
+        e.preventDefault();
+    });
+    $(document).on("touchend.hrfloat", endDrag);
+}
+
+function bindFloatingActions() {
+    $("#hr-float-collapse").on("click", function (e) {
+        e.stopPropagation();
+        const s = settings();
+        s.floatingCollapsed = !s.floatingCollapsed;
+        saveSettingsDebounced();
+        applyFloatingPosition();
+        // 同步到设置面板的折叠 checkbox
+        $("#hr-float-collapsed").prop("checked", s.floatingCollapsed);
+    });
+    $("#hr-float-hide").on("click", function (e) {
+        e.stopPropagation();
+        const s = settings();
+        s.floatingEnabled = false;
+        saveSettingsDebounced();
+        applyFloatingPosition();
+        $("#hr-float-enabled").prop("checked", false);
+    });
+}
+
+function updateFloatingUI() {
+    const $w = $("#hr-floating-widget");
+    if (!$w.length) return;
+    const s = settings();
+    if (!s.floatingEnabled) return;
+
+    const $hr = $("#hr-float-hr");
+    const $rmssd = $("#hr-float-rmssd");
+    const $detail = $("#hr-float-detail");
+    const stale = ageSeconds() > s.maxStaleSeconds;
+
+    if (state.currentHR == null) {
+        $hr.text("－－").css("color", "var(--SmartThemeBodyColor, #fff)");
+    } else {
+        $hr.text(state.currentHR).css(
+            "color",
+            stale ? "gray" : colorForHR(state.currentHR),
+        );
+    }
+    if (state.rmssd == null) {
+        $rmssd
+            .text("－－")
+            .css("color", "var(--SmartThemeBodyColor, #fff)");
+    } else {
+        $rmssd
+            .text(state.rmssd.toFixed(1))
+            .css("color", colorForRMSSD(state.rmssd));
+    }
+
+    let detailText;
+    if (!state.connected) {
+        detailText = "未连接";
+    } else if (state.deviceSendsRR === false) {
+        detailText = "心率已连接 · RR 不可用";
+    } else if (state.currentHR == null) {
+        detailText = "等待数据…";
+    } else {
+        const hrLabel = getStateLabel(state.currentHR);
+        const hrvLabel =
+            state.rmssd != null ? getHRVStateLabel(state.rmssd) : "—";
+        detailText = `${hrLabel} · ${hrvLabel}`;
+        if (stale) detailText = "(过时) " + detailText;
+    }
+    $detail.text(detailText);
+}
+
 // Periodic UI refresh (every 1s) so the "age" updates visually
 setInterval(updateUI, 1000);
 
@@ -562,6 +748,16 @@ function buildPanel() {
         <input id="hr-inject-hrv" type="checkbox" />
         <span>同时注入 HRV (RMSSD) — 设备不发 RR 则自动跳过</span>
       </label>
+
+      <label class="checkbox_label" for="hr-float-enabled">
+        <input id="hr-float-enabled" type="checkbox" />
+        <span>显示浮动窗 (常驻角落, 可拖拽)</span>
+      </label>
+      <label class="checkbox_label" for="hr-float-collapsed">
+        <input id="hr-float-collapsed" type="checkbox" />
+        <span>浮动窗折叠 (只显示数字)</span>
+      </label>
+      <input id="hr-float-reset-btn" class="menu_button" type="button" value="重置浮动窗位置" />
 
       <label for="hr-depth">注入深度 (距离最后一条消息的轮数, 0 = 紧贴最后)</label>
       <input id="hr-depth" type="number" min="0" max="20" step="1" class="text_pole" />
@@ -647,6 +843,8 @@ function loadSettingsToUI() {
     const s = settings();
     $("#hr-enabled").prop("checked", s.enabled);
     $("#hr-inject-hrv").prop("checked", s.injectHRV);
+    $("#hr-float-enabled").prop("checked", s.floatingEnabled);
+    $("#hr-float-collapsed").prop("checked", s.floatingCollapsed);
     $("#hr-depth").val(s.injectionDepth);
     $("#hr-role").val(s.injectionRole);
     $("#hr-template").val(s.template);
@@ -679,16 +877,22 @@ function bindEvents() {
         else connect();
     });
     $("#hr-test-btn").on("click", () => {
-        // 模拟一个心率值 + 一组 RR (用于验证 HRV 计算 / 注入链路)
+        // 测试: 注入一组带 ±50ms 抖动的假 RR, 期望 RMSSD≈40 / pNN50≈50% / maxΔ≈100ms.
+        // 为了得到纯净结果, 同时清空已有缓冲区, 并在接下来的 8 秒
+        // 内忽略真实设备通知 (UI 上的 HR 数字仍会跟随实时值更新).
+        const FREEZE_MS = 8000;
         const fake = Math.floor(70 + Math.random() * 60);
         const now = Date.now();
+        const baseRR = 60000 / fake;
+
         state.currentHR = fake;
         state.lastUpdate = now;
-        state.history.push({ ts: now, hr: fake });
-        if (state.history.length > settings().historySize)
-            state.history.shift();
-        // 造一段以当前心率为均值, 抖动 ±50ms 的假 RR 序列
-        const baseRR = 60000 / fake;
+        state.history = [{ ts: now, hr: fake }];
+        state.rrBuffer = [];
+        state.dupSkipped = 0;
+        state.deviceSendsRR = true;
+        state.testFreezeUntil = now + FREEZE_MS;
+
         for (let i = 0; i < 30; i++) {
             const jitter = (Math.random() - 0.5) * 100;
             state.rrBuffer.push({
@@ -696,16 +900,15 @@ function bindEvents() {
                 rr: baseRR + jitter,
             });
         }
-        state.deviceSendsRR = true;
         recomputeHRV();
         updateUI();
         updateInjection();
         console.log(
-            "[HR] Test injected:",
-            fake,
-            "bpm; RMSSD =",
-            state.rmssd?.toFixed(1),
-            "ms",
+            `[HR] Test injected ${fake} bpm with 30 fake RRs; ` +
+                `RMSSD=${state.rmssd?.toFixed(1)}ms, ` +
+                `pNN50=${state.pnn50?.toFixed(1)}%, ` +
+                `maxΔ=${state.maxDiff?.toFixed(0)}ms. ` +
+                `Real RR notifications frozen for ${FREEZE_MS}ms.`,
         );
     });
     $("#hr-enabled").on("change", function () {
@@ -717,6 +920,32 @@ function bindEvents() {
         s.injectHRV = this.checked;
         saveSettingsDebounced();
         updateInjection();
+    });
+    $("#hr-float-enabled").on("change", function () {
+        s.floatingEnabled = this.checked;
+        saveSettingsDebounced();
+        applyFloatingPosition();
+    });
+    $("#hr-float-collapsed").on("change", function () {
+        s.floatingCollapsed = this.checked;
+        saveSettingsDebounced();
+        applyFloatingPosition();
+    });
+    $("#hr-float-reset-btn").on("click", function () {
+        s.floatingX = null;
+        s.floatingY = null;
+        s.floatingEnabled = true;
+        s.floatingCollapsed = false;
+        saveSettingsDebounced();
+        $("#hr-float-enabled").prop("checked", true);
+        $("#hr-float-collapsed").prop("checked", false);
+        $("#hr-floating-widget").css({
+            top: "",
+            left: "",
+            right: "",
+            bottom: "",
+        });
+        applyFloatingPosition();
     });
     $("#hr-depth").on("change", function () {
         s.injectionDepth = parseInt(this.value) || 0;
@@ -786,12 +1015,16 @@ function bindEvents() {
 jQuery(async () => {
     try {
         $("#extensions_settings").append(buildPanel());
+        $("body").append(buildFloatingWidget());
+        applyFloatingPosition();
+        bindFloatingDrag();
+        bindFloatingActions();
         loadSettingsToUI();
         bindEvents();
         updateButtonText();
         updateUI();
         eventSource.on(event_types.GENERATION_STARTED, onGenerationStarted);
-        console.log("[HR] Heart Rate extension loaded");
+        console.log("[HR] Heart Rate extension loaded (with floating widget)");
     } catch (e) {
         console.error("[HR] init failed", e);
     }
