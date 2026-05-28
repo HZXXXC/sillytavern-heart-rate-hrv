@@ -1,0 +1,12 @@
+{
+    "display_name": "Heart Rate / HRV Monitor",
+    "loading_order": 10,
+    "requires": [],
+    "optional": [],
+    "js": "index.js",
+    "css": "style.css",
+    "author": "HZXXXC",
+    "version": "1.0.0",
+    "homePage": "https://github.com/HZXXXC/sillytavern-heart-rate-hrv",
+    "description": "实时蓝牙心率 + HRV (RMSSD) 监测器, 通过 Web Bluetooth API 读取标准 BLE Heart Rate Profile 设备 (Polar / Magene H303 / 佳明等), 自动注入心率与 HRV 状态到 AI 提示, 让角色能根据你的实时生理状态调节剧情节奏."
+}

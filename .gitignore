@@ -1,0 +1,22 @@
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+
+# Node (if anyone runs the test script in a folder with deps)
+node_modules/
+
+# Build output (none right now, but reserved)
+dist/
+build/

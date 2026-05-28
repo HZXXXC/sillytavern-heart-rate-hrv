@@ -1,0 +1,108 @@
+.heart-rate-extension {
+    margin: 8px 0;
+}
+
+.heart-rate-extension #hr-display-box {
+    text-align: center;
+    padding: 12px 8px;
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 8px;
+    margin-bottom: 8px;
+}
+
+.heart-rate-extension .hr-twocol {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.heart-rate-extension .hr-col {
+    min-width: 0;
+}
+
+.heart-rate-extension #hr-display,
+.heart-rate-extension #hrv-display {
+    font-size: 2.6em;
+    font-weight: bold;
+    line-height: 1;
+    transition: color 0.3s;
+    font-family: monospace;
+}
+
+.heart-rate-extension #hr-unit,
+.heart-rate-extension #hrv-unit {
+    font-size: 0.85em;
+    opacity: 0.7;
+    margin-top: 2px;
+}
+
+.heart-rate-extension #hr-detail,
+.heart-rate-extension #hrv-detail {
+    font-size: 0.78em;
+    opacity: 0.8;
+    margin-top: 6px;
+    word-break: break-word;
+}
+
+.heart-rate-extension #hr-rr-status {
+    font-size: 0.78em;
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.heart-rate-extension .hr-btn-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.heart-rate-extension .hr-btn-row .menu_button {
+    flex: 1;
+}
+
+.heart-rate-extension label {
+    display: block;
+    margin-top: 8px;
+    margin-bottom: 4px;
+    font-size: 0.9em;
+}
+
+.heart-rate-extension input[type="number"],
+.heart-rate-extension select,
+.heart-rate-extension textarea {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.heart-rate-extension details {
+    margin-top: 10px;
+    padding: 6px;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+}
+
+.heart-rate-extension details summary {
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.heart-rate-extension .hr-grid {
+    display: grid;
+    grid-template-columns: 1fr 80px;
+    gap: 4px;
+    align-items: center;
+    margin-top: 6px;
+}
+
+.heart-rate-extension .hr-grid label {
+    margin: 0;
+    font-size: 0.85em;
+}
+
+.heart-rate-extension .hr-foot {
+    margin-top: 10px;
+    font-size: 0.8em;
+    opacity: 0.6;
+    line-height: 1.4;
+}
